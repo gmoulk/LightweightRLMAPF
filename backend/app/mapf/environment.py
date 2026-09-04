@@ -1,0 +1,118 @@
+import heapq
+import torch
+import numpy as np
+import pogema
+from pogema import GridConfig
+
+def create_env(config_dict):
+    grid_cfg = GridConfig(
+        num_agents=config_dict["num_agents"],
+        size=config_dict["size"],
+        density=config_dict["density"],
+        obs_radius=5,
+        seed=None,
+        max_episode_steps=config_dict["max_episode_steps"]
+    )
+    env = pogema.pogema_v0(grid_config=grid_cfg)
+    return env
+
+class CurriculumManager:
+    def __init__(self):
+        self.level = 1
+        self.config_map = {
+            1: {"num_agents": 1, "size": 8,  "density": 0.0, "max_episode_steps": 256},
+            2: {"num_agents": 2, "size": 12, "density": 0.0, "max_episode_steps": 128},
+            3: {"num_agents": 4, "size": 16, "density": 0.0, "max_episode_steps": 128},
+            4: {"num_agents": 8, "size": 24, "density": 0.0, "max_episode_steps": 256},
+            5: {"num_agents": 16,"size": 32, "density": 0.0, "max_episode_steps": 256},
+            6: {"num_agents": 32,"size": 64, "density": 0.0, "max_episode_steps": 256},
+            7: {"num_agents": 2, "size": 8,  "density": 0.1, "max_episode_steps": 256},
+            8: {"num_agents": 4, "size": 16, "density": 0.1, "max_episode_steps": 256},
+            9: {"num_agents": 8, "size": 24, "density": 0.1, "max_episode_steps": 256},
+            10: {"num_agents": 2,"size": 12, "density": 0.2, "max_episode_steps": 256},
+            11: {"num_agents": 4,"size": 16, "density": 0.2, "max_episode_steps": 256},
+            12: {"num_agents": 8,"size": 24, "density": 0.2, "max_episode_steps": 256},
+            13: {"num_agents": 2,"size": 12, "density": 0.3, "max_episode_steps": 256},
+        }
+
+    def update(self, success_rate):
+        if success_rate >= 80 and self.level < 13:
+            self.level += 1
+            print(f"Level Up! Now at Level {self.level}")
+            return True
+        return False
+
+def get_goal_vec(env, current_cfg, device='cpu'):
+    agents = np.array(env.get_agents_xy())
+    targets = np.array(env.get_targets_xy())
+    grid_size = current_cfg.size
+    vec = (targets - agents) / grid_size
+    return torch.tensor(vec, dtype=torch.float32, device=device)
+
+def get_space_time_astar(grid, start, goal, reserved, max_t=30):
+    rows, cols = len(grid), len(grid[0])
+    moves = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)]
+
+    start_state = (0 + abs(start[0]-goal[0]) + abs(start[1]-goal[1]), 0, start[0], start[1])
+    pq = [start_state]
+
+    came_from = {}
+    g_score = {(start[0], start[1], 0): 0}
+
+    while pq:
+        f, t, x, y = heapq.heappop(pq)
+
+        if (x, y) == goal or t >= max_t:
+            path = []
+            curr = (x, y, t)
+            while curr in came_from:
+                path.append((curr[0], curr[1]))
+                curr = came_from[curr]
+            path.append(start)
+            return path[::-1]
+
+        for i, (dx, dy) in enumerate(moves):
+            nx, ny, nt = x + dx, y + dy, t + 1
+
+            if 0 <= nx < rows and 0 <= ny < cols and not grid[nx][ny]:
+                if (nx, ny, nt) in reserved: continue
+                if (nx, ny, t) in reserved and (x, y, nt) in reserved: continue
+
+                if (nx, ny, nt) not in g_score or g_score[(nx, ny, nt)] > nt:
+                    g_score[(nx, ny, nt)] = nt
+                    h = abs(nx-goal[0]) + abs(ny-goal[1])
+                    heapq.heappush(pq, (nt + h, nt, nx, ny))
+                    came_from[(nx, ny, nt)] = (x, y, t)
+
+    return [(start[0], start[1])] * 2
+
+def get_pbs_expert_actions(env):
+    core_env = env.unwrapped
+    grid = core_env.grid.get_obstacles()
+    agents_xy = core_env.get_agents_xy()
+    targets_xy = core_env.get_targets_xy()
+
+    num_agents = len(agents_xy)
+    reserved = set()
+    expert_actions = []
+
+    for i in range(num_agents):
+        start = agents_xy[i]
+        goal = targets_xy[i]
+
+        path = get_space_time_astar(grid, start, goal, reserved)
+
+        if len(path) > 1:
+            next_step = path[1]
+            dx, dy = next_step[0] - start[0], next_step[1] - start[1]
+            action_map = {(0,0):0, (-1,0):1, (1,0):2, (0,-1):3, (0,1):4}
+            expert_actions.append(action_map.get((dx, dy), 0))
+        else:
+            expert_actions.append(0)
+
+        for t, (px, py) in enumerate(path):
+            reserved.add((px, py, t))
+            if (px, py) == goal:
+                for future_t in range(t, 31):
+                    reserved.add((px, py, future_t))
+    return expert_actions
