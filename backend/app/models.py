@@ -22,4 +22,5 @@ class SolveResponse(BaseModel):
     status: str
     num_steps: int
     success: bool
-    paths: List[List[List[int]]]  # Format: [agent_0_path, agent_1_path, ...] where path is [[x0, y0], [x1, y1], ...]
+    paths: List[List[List[int]]]
+    svg_animation: Optional[str] = None
