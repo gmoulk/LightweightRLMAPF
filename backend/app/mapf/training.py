@@ -38,23 +38,20 @@ def run_marl_evaluation(model, env, num_episodes=10, device='cpu'):
             if all(terminated):
                 successes += 1
                 break
-            if any(truncated): break
+            if any(truncated): 
+                break
 
         total_rewards.append(ep_ret)
         total_lengths.append(ep_len)
 
     model.train()
-    return np.mean(total_rewards), np.mean(total_lengths), (successes/num_episodes)*100
+    return np.mean(total_rewards), np.mean(total_lengths), (successes / num_episodes) * 100.0
+
 
 def train_a2c(model, episodes=20000, lr=1e-4, gamma=0.99, entropy_coeff=0.05, il_coeff=0.5, seq_len=10, device='cpu'):
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     curriculum = CurriculumManager()
     env = create_env(curriculum.config_map[curriculum.level])
-
-    def get_dist(pogema_env):
-        agents = pogema_env.get_agents_xy()
-        targets = pogema_env.get_targets_xy()
-        return [abs(a[0]-t[0]) + abs(a[1]-t[1]) for a, t in zip(agents, targets)]
 
     history = {"episodes": [], "success_rate": [], "loss": [], "level": []}
 
@@ -159,6 +156,8 @@ def train_a2c(model, episodes=20000, lr=1e-4, gamma=0.99, entropy_coeff=0.05, il
 
             print(f"Ep {episode:04d} | SR: {sr:>3.1f}% | Loss: {total_loss.item():.4f} | Lvl: {curriculum.level}")
 
+            # Check consecutive streak condition before advancing
             if curriculum.update(sr):
                 env = create_env(curriculum.config_map[curriculum.level])
+
     return history

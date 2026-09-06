@@ -19,6 +19,10 @@ def create_env(config_dict):
 class CurriculumManager:
     def __init__(self):
         self.level = 1
+        self.consecutive_successes = 0
+        self.required_consecutive = 2
+        self.target_sr = 80.0
+        
         self.config_map = {
             1: {"num_agents": 1, "size": 8,  "density": 0.0, "max_episode_steps": 256},
             2: {"num_agents": 2, "size": 12, "density": 0.0, "max_episode_steps": 128},
@@ -35,11 +39,23 @@ class CurriculumManager:
             13: {"num_agents": 2,"size": 12, "density": 0.3, "max_episode_steps": 256},
         }
 
-    def update(self, success_rate):
-        if success_rate >= 80 and self.level < 13:
-            self.level += 1
-            print(f"Level Up! Now at Level {self.level}")
-            return True
+    def update(self, success_rate: float) -> bool:
+        """
+        Increments streak if SR >= 80%.
+        Advances level ONLY when streak hits 2 consecutive successful evaluations.
+        """
+        if success_rate >= self.target_sr:
+            self.consecutive_successes += 1
+            print(f"--> Target hit! Streak: {self.consecutive_successes}/{self.required_consecutive}")
+        else:
+            self.consecutive_successes = 0  # Reset streak on failure
+
+        if self.consecutive_successes >= self.required_consecutive:
+            if self.level + 1 in self.config_map:
+                self.level += 1
+                self.consecutive_successes = 0  # Reset streak for new level
+                print(f"*** ADVANCING TO CURRICULUM LEVEL {self.level} ***")
+                return True
         return False
 
 def get_goal_vec(env, current_cfg, device='cpu'):
