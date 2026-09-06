@@ -5,7 +5,7 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 from pogema import AnimationMonitor, AnimationConfig
 
-from app.models import MapfRequest, StepResponse, SolveRequest, SolveResponse
+from app.models import MapfRequest, StepResponse, MAPFSolveRequest, MAPFSolveResponse
 from app.mapf.environment import create_env, get_pbs_expert_actions, get_goal_vec
 
 router = APIRouter()
@@ -15,52 +15,55 @@ state = {
     "is_training": True
 }
 
+
 @router.post("/expert-step", response_model=StepResponse)
 def get_expert_step(req: MapfRequest):
-    env_config = {
-        "num_agents": req.num_agents,
-        "size": req.size,
-        "density": req.density,
-        "max_episode_steps": req.max_steps
-    }
-    env = create_env(env_config)
+    env = create_env(req)
     env.reset()
     actions = get_pbs_expert_actions(env)
     return StepResponse(step=1, actions=actions, done=False)
 
-@router.post("/solve", response_model=SolveResponse)
-def solve_mapf(req: SolveRequest):
+
+@router.post("/solve", response_model=MAPFSolveResponse)
+def solve_mapf(req: MAPFSolveRequest):
+    print("--- SOLVE REQUEST RECEIVED ---")
+    print(f"Custom map present: {req.custom_map is not None}")
+    if req.custom_map is not None:
+        print(f"Num agents custom: {len(req.agents or [])}")
+        print(f"Num goals custom: {len(req.goals or [])}")
     if state["is_training"]:
         raise HTTPException(
             status_code=400, 
-            detail="Model is currently training. Please wait until training completes."
+            detail="Model is currently training in background. Please wait..."
         )
+
+    # Validate custom map inputs if sent
+    if req.custom_map is not None:
+        if not req.agents or not req.goals:
+            raise HTTPException(status_code=400, detail="Custom map requires agents and goals.")
+        if len(req.agents) != len(req.goals):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Agent count ({len(req.agents)}) must match Goal count ({len(req.goals)})."
+            )
 
     model = state["model"]
     model.eval()
 
-    env_config = {
-        "num_agents": req.num_agents,
-        "size": req.size,
-        "density": req.density,
-        "max_episode_steps": req.max_steps
-    }
-    
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # Pass a clean AnimationConfig instance
         anim_cfg = AnimationConfig()
-        raw_env = create_env(env_config)
+        raw_env = create_env(req)
         env = AnimationMonitor(raw_env, animation_config=anim_cfg)
 
         obs, _ = env.reset()
-        num_agents = req.num_agents
+        num_agents = env.unwrapped.get_num_agents()
         seq_len = 10
         device = 'cpu'
 
+        # Buffers for CommTransformerNet
         obs_buf = torch.zeros((num_agents, seq_len, 3, 11, 11), device=device)
         goal_buf = torch.zeros((num_agents, seq_len, 2), device=device)
 
-        paths = [[list(pos)] for pos in env.unwrapped.get_agents_xy()]
         solved = False
         step = 0
 
@@ -68,6 +71,7 @@ def solve_mapf(req: SolveRequest):
             gv = get_goal_vec(env.unwrapped, env.unwrapped.grid_config, device=device)
             obs_t = torch.tensor(np.array(obs), dtype=torch.float32, device=device)
 
+            # Shift buffer windows
             obs_buf = torch.roll(obs_buf, shifts=-1, dims=1)
             obs_buf[:, -1] = obs_t
             goal_buf = torch.roll(goal_buf, shifts=-1, dims=1)
@@ -79,17 +83,13 @@ def solve_mapf(req: SolveRequest):
 
             obs, rewards, terminated, truncated, _ = env.step(actions)
 
-            curr_positions = env.unwrapped.get_agents_xy()
-            for idx, pos in enumerate(curr_positions):
-                paths[idx].append(list(pos))
-
             if all(terminated):
                 solved = True
                 break
             if any(truncated):
                 break
 
-        # Specify output path directly in save_animation
+        # Render SVG animation
         target_path = os.path.join(tmp_dir, "render.svg")
         env.save_animation(target_path)
         
@@ -98,10 +98,8 @@ def solve_mapf(req: SolveRequest):
             with open(target_path, "r", encoding="utf-8") as f:
                 svg_content = f.read()
 
-    return SolveResponse(
-        status="completed",
-        num_steps=step + 1,
+    return MAPFSolveResponse(
         success=solved,
-        paths=paths,
+        num_steps=step + 1,
         svg_animation=svg_content
     )
