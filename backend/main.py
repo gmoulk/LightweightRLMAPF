@@ -13,7 +13,7 @@ from app.mapf.training import train_a2c
 from app.api import router as api_router, state
 
 device = 'cpu'
-WEIGHTS_PATH = "backend/app/mapf/pretrained_model.pth"
+WEIGHTS_PATH = os.path.join(os.path.dirname(__file__), "app", "mapf", "pretrained_model.pth")
 
 global_model = CommTransformerNet().to(device)
 state["model"] = global_model

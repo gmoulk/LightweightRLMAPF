@@ -88,11 +88,11 @@ export default function App() {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const res = await fetch('http://localhost:8000/');
+        const res = await fetch('/api/v1/status');
         const data = await res.json();
         setTrainingActive(data.training_active);
       } catch (err) {
-        setError('Backend server is offline. Run main.py first.');
+        setError('Backend server is offline. Start the Docker Compose services or run main.py.');
       }
     };
 
@@ -160,7 +160,7 @@ export default function App() {
         };
 
     try {
-      const res = await fetch('http://localhost:8000/api/v1/solve', {
+      const res = await fetch('/api/v1/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

@@ -1,0 +1,10 @@
+.git
+.venv
+**/.venv
+venv
+**/venv
+__pycache__
+**/__pycache__
+*.py[cod]
+**/node_modules
+**/dist

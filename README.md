@@ -91,6 +91,18 @@ The core architecture implements a communication-enhanced Transformer model trai
     ```
     Open your browser and navigate to `http://localhost:5173`.
 
+## Docker Deployment
+
+Docker and the Docker Compose plugin are required. From the repository root, build and start the application with:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:8080`. The frontend container serves the production build and forwards `/api` requests to the backend container. To stop the application, press `Ctrl+C` and run `docker compose down`.
+
+The backend loads `backend/app/mapf/pretrained_model.pth` at startup. If the checkpoint is unavailable, it starts training in the background, and the UI remains unavailable for solving until training finishes.
+
 ## Workflow & Development History
 
 ### Original Research Phase (Google Colab)

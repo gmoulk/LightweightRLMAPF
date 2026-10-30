@@ -15,6 +15,13 @@ state = {
     "is_training": True
 }
 
+@router.get("/status")
+def get_status():
+    return {
+        "training_active": state["is_training"],
+        "device": "cpu"
+    }
+
 
 @router.post("/expert-step", response_model=StepResponse)
 def get_expert_step(req: MapfRequest):
