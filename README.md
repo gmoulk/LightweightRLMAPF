@@ -141,7 +141,7 @@ If you reference this work or the underlying architecture in your research, plea
   author       = {Gregorios Moulkiotis},
   title        = {Χρήση Αρχιτεκτονικών Transformer και Ενισχυτικής Μάθησης με Μάθηση Μίμησης για το Πρόβλημα της Πολυπρακτορικής Εύρεσης Μονοπατιών},
   school       = {Department of Informatics and Telecommunications, National and Kapodistrian University of Athens},
-  year         = {2024},
+  year         = {2026},
   type         = {Master's Thesis},
   url          = {[https://pergamos.lib.uoa.gr/item/uoadl:5428603](https://pergamos.lib.uoa.gr/item/uoadl:5428603)}
 }
